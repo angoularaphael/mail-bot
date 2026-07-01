@@ -1,0 +1,22 @@
+{
+  "name": "mail-bot",
+  "version": "1.0.0",
+  "description": "Bot gestion boîte mail Boxing Center — classification automatique & réponses types",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js --watch",
+    "once": "node index.js",
+    "report": "node index.js --report",
+    "dry-run": "node index.js --dry-run",
+    "verify": "node index.js --verify"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "dotenv": "^16.4.5",
+    "imapflow": "^1.0.169",
+    "mailparser": "^3.7.2",
+    "nodemailer": "^9.0.3"
+  }
+}
