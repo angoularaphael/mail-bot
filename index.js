@@ -147,16 +147,18 @@ async function processEmail(email) {
         warn(`Erreur réponse auto: ${e.message}`);
     }
 
-    // 2. Transmission au responsable
-    try {
-        forwardedTo = await forwardEmail(email, classification);
-        if (forwardedTo) {
-            log(`  📤 Transmis → ${forwardedTo}`);
+    // 2. Secrétariat — uniquement si aucune réponse auto n'a pu être envoyée
+    if (!autoReplied) {
+        try {
+            forwardedTo = await forwardEmail(email, classification);
+            if (forwardedTo) {
+                log(`  📤 Transmis au secrétariat → ${forwardedTo}`);
+            }
+        } catch (e) {
+            const fe = `forward:${e.message}`;
+            errorMsg  = errorMsg ? `${errorMsg}; ${fe}` : fe;
+            warn(`Erreur transmission secrétariat: ${e.message}`);
         }
-    } catch (e) {
-        const fe = `forward:${e.message}`;
-        errorMsg  = errorMsg ? `${errorMsg}; ${fe}` : fe;
-        warn(`Erreur transmission: ${e.message}`);
     }
 
     const processed = !errorMsg && (autoReplied || forwardedTo);
@@ -301,12 +303,10 @@ async function verify() {
     }
 
     // Routing
-    log('\n📮 Routing actuel :');
-    const { routes } = require('./config/routing');
-    for (const [cat, route] of Object.entries(routes())) {
-        const dest = route.dest || '(réponse auto uniquement)';
-        console.log(`   ${cat.padEnd(16)} → ${dest}`);
-    }
+    log('\n📮 Routing (2 boîtes) :');
+    const { getReception, getSecretariat } = require('./config/routing');
+    console.log(`   Réception (IMAP + copie BCC) → ${getReception()}`);
+    console.log(`   Secrétariat (si pas de réponse auto) → ${getSecretariat()}`);
 }
 
 // ─── Serveur HTTP (health check pour bot-hosting) ────────────────────────────

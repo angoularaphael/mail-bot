@@ -8,25 +8,27 @@ Bot de gestion automatique de la boîte mail Boxing Center.
 - **Classification** automatique en 12 catégories
 - **Détection des urgences** par mots-clés
 - **Réponses types** personnalisées par catégorie
-- **Transmission** au bon responsable selon la catégorie
+- **Transmission** au secrétariat si le bot ne peut pas répondre au client
 - **Suivi** des emails non traités (Supabase + JSON local)
 
 ## Catégories détectées
 
-| ID | Libellé | Transmis à |
+| ID | Libellé | Action |
 |---|---|---|
-| `inscription` | Demande d'inscription | Réception |
-| `seance_essai` | Demande séance d'essai | Réception |
-| `tarif` | Demande tarif | _(réponse auto uniquement)_ |
-| `planning` | Demande planning | _(réponse auto uniquement)_ |
-| `enfant_ado` | Demande enfant / ado | Coach |
-| `remboursement` | Demande remboursement | Comptabilité |
-| `resiliation` | Demande résiliation | Responsable |
-| `partenariat` | Demande partenariat | Direction |
-| `competition` | Demande compétition | Coach |
-| `facture` | Demande facture | Comptabilité |
-| `reclamation` | Réclamation | Responsable |
-| `autre` | Autre | Réception |
+| `inscription` | Demande d'inscription | Réponse auto |
+| `seance_essai` | Demande séance d'essai | Réponse auto |
+| `tarif` | Demande tarif | Réponse auto |
+| `planning` | Demande planning | Réponse auto |
+| `enfant_ado` | Demande enfant / ado | Réponse auto |
+| `remboursement` | Demande remboursement | Réponse auto |
+| `resiliation` | Demande résiliation | Réponse auto |
+| `partenariat` | Demande partenariat | Réponse auto |
+| `competition` | Demande compétition | Réponse auto |
+| `facture` | Demande facture | Réponse auto |
+| `reclamation` | Réclamation | Réponse auto |
+| `autre` | Autre | Réponse auto ou secrétariat |
+
+Si le bot ne peut pas répondre directement au client, le message est transmis à `MAIL_SECRETARIAT`.
 
 ## Installation
 
@@ -51,16 +53,20 @@ cp .env.example .env
 ### Brevo SMTP
 Les clés SMTP Brevo sont déjà dans `BOXPLUS/.env` — copier les valeurs `BREVO_SMTP_*`.
 
-### Routing
-Renseigner les adresses email des responsables :
+### Routing (2 boîtes)
+
+Tous les messages arrivent sur la boîte **réception** (surveillée en IMAP).  
+Si le bot ne peut pas répondre au client, le message part vers le **secrétariat**.
+
 ```
+# Production
 MAIL_RECEPTION=boxingcenter31@gmail.com
-MAIL_MANAGER=manager@boxingcenter.fr
-MAIL_COMPTA=compta@boxingcenter.fr
-MAIL_DIRECTION=direction@boxingcenter.fr
-MAIL_COACH=coach@boxingcenter.fr
+MAIL_SECRETARIAT=secretariat.boxingcenter@gmail.com
+
+# Test
+MAIL_RECEPTION=angoularaphael05@gmail.com
+MAIL_SECRETARIAT=linuxcam05@gmail.com
 ```
-La même adresse peut être utilisée pour plusieurs rôles.
 
 ## Utilisation
 
