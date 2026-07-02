@@ -44,7 +44,7 @@ cp .env.example .env
 2. Si la validation en 2 étapes est activée : **Compte Google** → **Sécurité** → **Mots de passe des applications** → générer un mot de passe 16 caractères
 3. Renseigner dans `.env` :
    ```
-   IMAP_USER=boxingcenter31@gmail.com
+   IMAP_USER=angoularaphael05@gmail.com
    IMAP_PASS=xxxx xxxx xxxx xxxx   # mot de passe d'application
    ```
 
