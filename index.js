@@ -60,7 +60,7 @@ async function processEmail(email) {
     if (prior.handled) {
         log(`  🔁 Déjà traité (${prior.reason}) — de: ${email.from.address}`);
         log(`     Objet: ${email.subject}`);
-        return { autoReplied: false, forwardedTo: null, error: null, skipped: true, alreadyHandled: true };
+        return { autoReplied: false, forwardedTo: null, error: null, skipped: true, alreadyHandled: true, keepUnread: true };
     }
 
     const { category, label, confidence } = classify(email.subject, email.text);
@@ -80,7 +80,7 @@ async function processEmail(email) {
             processed:   true,
             error:       `skipped:${skipReason}`,
         });
-        return { autoReplied: false, forwardedTo: null, error: null, skipped: true };
+        return { autoReplied: false, forwardedTo: null, error: null, skipped: true, keepUnread: true };
     }
 
     const urgTag = urgent ? ' 🚨 URGENT' : '';
@@ -214,9 +214,11 @@ async function run() {
             if (res.autoReplied) replied++;
             if (res.forwardedTo) forwarded++;
             if (res.error)       errors++;
-            // Marquer lu si traité, ignoré, ou déjà traité avant
-            // Marquer lu seulement les emails encore non lus
-            if (!res.error && email.unseen !== false) seenUids.push(email.uid);
+            // Marquer lu uniquement si réponse auto ou transfert secrétariat réussi
+            const handled = res.autoReplied || res.forwardedTo;
+            if (handled && !res.keepUnread && email.unseen !== false) {
+                seenUids.push(email.uid);
+            }
         } catch (e) {
             err(`Traitement ${email.messageId}: ${e.message}`);
             errors++;
