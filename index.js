@@ -16,12 +16,14 @@ require('dotenv').config();
 const { fetchUnseenEmails, markAsSeen } = require('./lib/imap');
 const { classify, detectUrgency }       = require('./lib/classifier');
 const { renderTemplate }                = require('./lib/templates');
+const { buildReply }                    = require('./lib/reply');
 const { buildEmailHtml, buildPlainText } = require('./lib/brand');
 const { sendEmail, isConfigured: isMailReady, verify: verifyMail } = require('./lib/mailer');
 const { forwardEmail }                  = require('./lib/forwarder');
-const { saveEmail, getUnprocessed, getRecent } = require('./lib/tracker');
+const { saveEmail, getUnprocessed, isAlreadyHandled } = require('./lib/tracker');
 const { isConfigured: isImapReady }     = require('./lib/imap');
-const { shouldSkip, isNoReplyAddress, getReplyAddress } = require('./lib/filter');
+const { shouldSkip, getReplyAddress } = require('./lib/filter');
+const { isAiEnabled, verify: verifyGroq } = require('./lib/groq');
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -52,6 +54,15 @@ function divider() { log('─'.repeat(58)); }
 // ─── Traitement d'un email ────────────────────────────────────────────────────
 
 async function processEmail(email) {
+    const msgKey = email.messageId || `imap-uid-${email.uid}`;
+    const prior  = await isAlreadyHandled(msgKey);
+
+    if (prior.handled) {
+        log(`  🔁 Déjà traité (${prior.reason}) — de: ${email.from.address}`);
+        log(`     Objet: ${email.subject}`);
+        return { autoReplied: false, forwardedTo: null, error: null, skipped: true, alreadyHandled: true };
+    }
+
     const { category, label, confidence } = classify(email.subject, email.text);
     const { urgent, keyword: urgKw }      = detectUrgency(email.subject, email.text);
 
@@ -81,8 +92,8 @@ async function processEmail(email) {
     let errorMsg    = null;
 
     if (DRY_RUN) {
-        const tpl = renderTemplate(category, email.from.name);
-        log(`  🔍 [DRY-RUN] Réponse type: "${tpl.subject}"`);
+        const tpl = await buildReply(category, email);
+        log(`  🔍 [DRY-RUN] Réponse (${tpl.source}): "${tpl.subject}"`);
         if (urgent) log(`  🔍 [DRY-RUN] Urgence détectée: "${urgKw}"`);
 
         await saveEmail({
@@ -117,7 +128,7 @@ async function processEmail(email) {
     if (!replyAddr) {
         log(`  ℹ️  Pas de réponse auto (pas d'adresse client valide)`);
     } else try {
-        const tpl  = renderTemplate(category, email.from.name || email.replyTo?.name);
+        const tpl  = await buildReply(category, email);
         const html = buildEmailHtml({ body: tpl.body, subject: tpl.subject });
         const text = buildPlainText({ body: tpl.body });
 
@@ -130,7 +141,7 @@ async function processEmail(email) {
         });
 
         autoReplied = true;
-        log(`  ✅ Réponse auto envoyée → ${replyAddr}${replyBcc ? ` (copie → ${replyBcc})` : ''}`);
+        log(`  ✅ Réponse auto envoyée → ${replyAddr} [${tpl.source}]${replyBcc ? ` (copie → ${replyBcc})` : ''}`);
     } catch (e) {
         errorMsg = `reply:${e.message}`;
         warn(`Erreur réponse auto: ${e.message}`);
@@ -168,6 +179,7 @@ async function processEmail(email) {
 async function run() {
     divider();
     log(`🥊 Boxing Center Mail Bot — début du cycle`);
+    if (isAiEnabled()) log('🤖 Réponses IA : Groq activé');
     if (DRY_RUN) log('⚠️  Mode DRY-RUN : aucun email envoyé');
 
     // Récupération
@@ -195,7 +207,7 @@ async function run() {
             if (res.autoReplied) replied++;
             if (res.forwardedTo) forwarded++;
             if (res.error)       errors++;
-            // Marquer lu seulement si traité ou ignoré (pas en cas d'erreur Brevo)
+            // Marquer lu si traité, ignoré, ou déjà traité avant
             if (!res.error) seenUids.push(email.uid);
         } catch (e) {
             err(`Traitement ${email.messageId}: ${e.message}`);
@@ -267,6 +279,19 @@ async function verify() {
         if (/525|unauthorized ip/i.test(mailResult.error || '')) {
             warn('→ Ajoutez BREVO_API_KEY (xkeysib…) dans .env pour contourner le blocage IP SMTP');
         }
+    }
+
+    // Groq IA
+    if (isAiEnabled()) {
+        log('   Test Groq...');
+        const groqResult = await verifyGroq();
+        if (groqResult.ok) {
+            log(`✅ Groq OK — modèle ${groqResult.model} (clé ${groqResult.keyIndex})`);
+        } else {
+            warn(`Groq : ${groqResult.error} — fallback templates`);
+        }
+    } else {
+        log('ℹ️  Groq désactivé — réponses templates fixes');
     }
 
     // Routing

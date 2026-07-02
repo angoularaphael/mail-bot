@@ -106,6 +106,7 @@ if (fs.existsSync(ROOT_ENV_PATH)) {
         'WATCH_MODE',
         'BOXING_CENTER_SITE_URL', 'BOXING_CENTER_CONTACT_EMAIL',
         'BOT_PUBLIC_HOST',
+        'USE_AI_REPLY', 'GROQ_API_KEY', 'GROQ_API_KEY_2', 'GROQ_MODEL',
     ];
     const lines = ['# Auto-généré par bootstrap.js'];
     for (const k of ENV_KEYS) {
