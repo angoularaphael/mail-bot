@@ -187,10 +187,12 @@ async function run() {
     try {
         const result = await fetchUnseenEmails(MAX_MAILS);
         emails = result.emails;
-        const unseenNote = result.unseenTotal > emails.length
-            ? ` (${result.unseenTotal} non lus au total, ${emails.length} traités ce cycle)`
-            : '';
-        log(`📬 ${emails.length} email(s) non lu(s) détecté(s)${unseenNote}`);
+        const unseenNote = result.unseenTotal > 0
+            ? ` (${result.unseenTotal} non lu(s), ${emails.length} à examiner ce cycle)`
+            : emails.length > 0
+                ? ` (${emails.length} récent(s) dont lus — Gmail ouvert avant le bot)`
+                : '';
+        log(`📬 ${emails.length} email(s) à traiter${unseenNote}`);
     } catch (e) {
         err(`Connexion IMAP impossible: ${e.message}`);
         return { replied: 0, forwarded: 0, errors: 1 };
@@ -211,7 +213,8 @@ async function run() {
             if (res.forwardedTo) forwarded++;
             if (res.error)       errors++;
             // Marquer lu si traité, ignoré, ou déjà traité avant
-            if (!res.error) seenUids.push(email.uid);
+            // Marquer lu seulement les emails encore non lus
+            if (!res.error && email.unseen !== false) seenUids.push(email.uid);
         } catch (e) {
             err(`Traitement ${email.messageId}: ${e.message}`);
             errors++;
