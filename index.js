@@ -187,7 +187,10 @@ async function run() {
     try {
         const result = await fetchUnseenEmails(MAX_MAILS);
         emails = result.emails;
-        log(`📬 ${emails.length} email(s) non lu(s) détecté(s)`);
+        const unseenNote = result.unseenTotal > emails.length
+            ? ` (${result.unseenTotal} non lus au total, ${emails.length} traités ce cycle)`
+            : '';
+        log(`📬 ${emails.length} email(s) non lu(s) détecté(s)${unseenNote}`);
     } catch (e) {
         err(`Connexion IMAP impossible: ${e.message}`);
         return { replied: 0, forwarded: 0, errors: 1 };
