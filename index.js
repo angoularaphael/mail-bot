@@ -21,7 +21,7 @@ const { sendEmail, isConfigured: isMailReady, verify: verifyMail } = require('./
 const { forwardEmail }                  = require('./lib/forwarder');
 const { saveEmail, getUnprocessed, getRecent } = require('./lib/tracker');
 const { isConfigured: isImapReady }     = require('./lib/imap');
-const { shouldSkip, isNoReplyAddress }  = require('./lib/filter');
+const { shouldSkip, isNoReplyAddress, getReplyAddress } = require('./lib/filter');
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -110,23 +110,27 @@ async function processEmail(email) {
         return { autoReplied: false, forwardedTo: null, error: 'mail_not_configured' };
     }
 
-    // 1. Réponse automatique à l'expéditeur (sauf noreply)
-    if (isNoReplyAddress(email.from.address)) {
-        log(`  ℹ️  Pas de réponse auto (adresse noreply)`);
+    // 1. Réponse automatique au client (Reply-To prioritaire)
+    const replyAddr = getReplyAddress(email);
+    const replyBcc  = (process.env.AUTO_REPLY_BCC || process.env.MAIL_RECEPTION || '').trim();
+
+    if (!replyAddr) {
+        log(`  ℹ️  Pas de réponse auto (pas d'adresse client valide)`);
     } else try {
-        const tpl  = renderTemplate(category, email.from.name);
+        const tpl  = renderTemplate(category, email.from.name || email.replyTo?.name);
         const html = buildEmailHtml({ body: tpl.body, subject: tpl.subject });
         const text = buildPlainText({ body: tpl.body });
 
         await sendEmail({
-            to:      email.from.address,
+            to:      replyAddr,
             subject: tpl.subject,
             html,
             text,
+            bcc:     replyBcc || undefined,
         });
 
         autoReplied = true;
-        log(`  ✅ Réponse auto envoyée → ${email.from.address}`);
+        log(`  ✅ Réponse auto envoyée → ${replyAddr}${replyBcc ? ` (copie → ${replyBcc})` : ''}`);
     } catch (e) {
         errorMsg = `reply:${e.message}`;
         warn(`Erreur réponse auto: ${e.message}`);
