@@ -27,7 +27,7 @@ const { isConfigured: isImapReady }     = require('./lib/imap');
 const args = new Set(process.argv.slice(2));
 
 const DRY_RUN   = args.has('--dry-run')  || process.env.BOT_DRY_RUN === 'true';
-const WATCH     = args.has('--watch');
+const WATCH     = args.has('--watch')    || process.env.WATCH_MODE  === 'true';
 const REPORT    = args.has('--report');
 const VERIFY    = args.has('--verify');
 const POLL_MS   = parseInt(process.env.POLL_INTERVAL_MS  || '300000', 10);
