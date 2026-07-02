@@ -17,10 +17,11 @@ const { fetchUnseenEmails, markAsSeen } = require('./lib/imap');
 const { classify, detectUrgency }       = require('./lib/classifier');
 const { renderTemplate }                = require('./lib/templates');
 const { buildEmailHtml, buildPlainText } = require('./lib/brand');
-const { sendEmail, isConfigured: isSmtpReady, verify: verifySmtp } = require('./lib/mailer');
+const { sendEmail, isConfigured: isMailReady, verify: verifyMail } = require('./lib/mailer');
 const { forwardEmail }                  = require('./lib/forwarder');
 const { saveEmail, getUnprocessed, getRecent } = require('./lib/tracker');
 const { isConfigured: isImapReady }     = require('./lib/imap');
+const { shouldSkip, isNoReplyAddress }  = require('./lib/filter');
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -56,6 +57,21 @@ async function processEmail(email) {
 
     const classification = { category, label, confidence, urgent };
 
+    const { skip, reason: skipReason } = shouldSkip(email, classification);
+    if (skip) {
+        log(`  ⏭️  Ignoré (${skipReason}) — de: ${email.from.address}`);
+        log(`     Objet: ${email.subject}`);
+        await saveEmail({
+            ...email,
+            classification,
+            autoReplied: false,
+            forwardedTo: null,
+            processed:   true,
+            error:       `skipped:${skipReason}`,
+        });
+        return { autoReplied: false, forwardedTo: null, error: null, skipped: true };
+    }
+
     const urgTag = urgent ? ' 🚨 URGENT' : '';
     log(`  📧 [${label}]${urgTag}  score:${confidence}  de: ${email.from.address}`);
     log(`     Objet: ${email.subject}`);
@@ -81,21 +97,23 @@ async function processEmail(email) {
         return { autoReplied: false, forwardedTo: null, error: null };
     }
 
-    if (!isSmtpReady()) {
-        warn('SMTP non configuré — aucune réponse auto ni transmission envoyée.');
+    if (!isMailReady()) {
+        warn('Brevo non configuré — ajoutez BREVO_API_KEY dans .env');
         await saveEmail({
             ...email,
             classification,
             autoReplied: false,
             forwardedTo: null,
             processed:   false,
-            error:       'smtp_not_configured',
+            error:       'mail_not_configured',
         });
-        return { autoReplied: false, forwardedTo: null, error: 'smtp_not_configured' };
+        return { autoReplied: false, forwardedTo: null, error: 'mail_not_configured' };
     }
 
-    // 1. Réponse automatique à l'expéditeur
-    try {
+    // 1. Réponse automatique à l'expéditeur (sauf noreply)
+    if (isNoReplyAddress(email.from.address)) {
+        log(`  ℹ️  Pas de réponse auto (adresse noreply)`);
+    } else try {
         const tpl  = renderTemplate(category, email.from.name);
         const html = buildEmailHtml({ body: tpl.body, subject: tpl.subject });
         const text = buildPlainText({ body: tpl.body });
@@ -126,7 +144,7 @@ async function processEmail(email) {
         warn(`Erreur transmission: ${e.message}`);
     }
 
-    const processed = autoReplied && !errorMsg;
+    const processed = !errorMsg && (autoReplied || forwardedTo);
 
     // 3. Sauvegarde
     await saveEmail({
@@ -173,7 +191,8 @@ async function run() {
             if (res.autoReplied) replied++;
             if (res.forwardedTo) forwarded++;
             if (res.error)       errors++;
-            seenUids.push(email.uid);
+            // Marquer lu seulement si traité ou ignoré (pas en cas d'erreur Brevo)
+            if (!res.error) seenUids.push(email.uid);
         } catch (e) {
             err(`Traitement ${email.messageId}: ${e.message}`);
             errors++;
@@ -234,13 +253,16 @@ async function verify() {
         log(`✅ IMAP configuré → ${process.env.IMAP_USER}@${process.env.IMAP_HOST || 'imap.gmail.com'}`);
     }
 
-    // SMTP
-    log('   Test SMTP Brevo...');
-    const smtpResult = await verifySmtp();
-    if (smtpResult.ok) {
-        log(`✅ SMTP OK → ${process.env.BREVO_SMTP_LOGIN}@${process.env.BREVO_SMTP_HOST || 'smtp-relay.brevo.com'}`);
+    // Brevo (API ou SMTP)
+    log('   Test Brevo...');
+    const mailResult = await verifyMail();
+    if (mailResult.ok) {
+        log(`✅ Brevo OK (via ${mailResult.via})`);
     } else {
-        warn(`SMTP : ${smtpResult.error}`);
+        warn(`Brevo : ${mailResult.error}`);
+        if (/525|unauthorized ip/i.test(mailResult.error || '')) {
+            warn('→ Ajoutez BREVO_API_KEY (xkeysib…) dans .env pour contourner le blocage IP SMTP');
+        }
     }
 
     // Routing

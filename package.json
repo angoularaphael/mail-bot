@@ -14,6 +14,7 @@
   "license": "ISC",
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
+    "axios": "^1.16.1",
     "dotenv": "^16.4.5",
     "imapflow": "^1.0.169",
     "mailparser": "^3.7.2",
